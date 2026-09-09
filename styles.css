@@ -1,0 +1,24 @@
+body { font-family: Arial, sans-serif; background:#f4f5f7; margin:0; padding:0; }
+.wrap { max-width: 480px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font-size: 20px; text-align:center; }
+h2 { font-size: 18px; }
+.warning { background:#fff3cd; border:1px solid #ffe69c; color:#664d03; padding:10px; border-radius:6px; font-size:13px; margin-bottom:12px; }
+.step { display:none; background:#fff; border-radius:10px; padding:16px; margin-bottom:12px; }
+.step.active { display:block; }
+label { display:block; margin:12px 0 4px; font-weight:bold; font-size:14px; }
+input[type=text], input[type=password], input[type=number], input[type=date], select {
+  width:100%; box-sizing:border-box; padding:10px; font-size:16px; border:1px solid #ccc; border-radius:6px;
+}
+button {
+  margin-top:16px; width:100%; padding:12px; font-size:16px; border:none; border-radius:6px;
+  background:#1a73e8; color:#fff; cursor:pointer;
+}
+button.secondary { background:#e0e0e0; color:#333; margin-right:8px; }
+.error { color:#c62828; margin-top:8px; font-size:14px; }
+.checkbox-list label { font-weight:normal; display:flex; align-items:center; gap:8px; }
+.items-list .item-row { display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee; }
+.items-list .item-row span { flex:1; font-size:14px; }
+.items-list .item-row input { width:90px; }
+.custom-block { margin-top:20px; padding-top:12px; border-top:1px dashed #ccc; }
+.wa-button { display:block; text-align:center; background:#25D366; color:#fff; padding:12px; border-radius:6px; text-decoration:none; margin-top:12px; }
+a#fileLink { display:block; text-align:center; margin-top:12px; }
