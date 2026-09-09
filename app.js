@@ -11,8 +11,7 @@
       https://script.google.com/macros/s/XXXXXXXX/exec
    2) Вставьте её вместо строки ниже.
    ========================================================================== */
-const API_URL = "https://script.google.com/macros/s/AKfycbwSpoC7PaiNzykk-46fU75Arp_0jLatT5WUFR3qLG0JL9Xbo3xK6PeVaW-FSZk4Gbg/exec
-";
+const API_URL = "https://script.google.com/macros/s/AKfycbwSpoC7PaiNzykk-46fU75Arp_0jLatT5WUFR3qLG0JL9Xbo3xK6PeVaW-FSZk4Gbg/exec";
 
 let INIT = null;
 const CURRENT = { loginId: null, fio: null, role: null };
