@@ -11,7 +11,7 @@
       https://script.google.com/macros/s/XXXXXXXX/exec
    2) Вставьте её вместо строки ниже.
    ========================================================================== */
-https://script.google.com/macros/s/AKfycbzRhMSzHWBqzH_pBwQOakyVIzUPgeDLsTPUZkZ0FOqtNCPWYk_3qkIk95a2Cf42BJdq/exec
+https://script.google.com/macros/library/d/1D5ple7Xrh6KN6zg1p2S5L5cdBZj4pFEHumAMxB89chCMHaQBY3WivYdr/2
 
 let INIT = null;
 const CURRENT = { loginId: null, fio: null, role: null };
@@ -21,19 +21,42 @@ function isConfigured() {
   return API_URL && API_URL.indexOf("http") === 0;
 }
 
-async function apiGet(action) {
-  const res = await fetch(API_URL + '?action=' + encodeURIComponent(action));
-  return res.json();
-}
+// JSONP вместо fetch(): грузим ответ сервера через <script src="...">.
+// На такую загрузку CORS не распространяется (это не XHR/fetch-запрос),
+// поэтому она надёжно работает даже там, где обычный fetch() к Apps Script
+// падает с "Failed to fetch" из-за внутреннего редиректа Google.
+function jsonp(action, params) {
+  return new Promise(function (resolve, reject) {
+    const cbName = 'cb_' + Math.random().toString(36).slice(2);
+    const timeoutId = setTimeout(function () {
+      cleanup();
+      reject(new Error('Сервер не ответил за 15 секунд. Проверьте API_URL и интернет.'));
+    }, 15000);
 
-// Без ручных заголовков — тело уходит как text/plain, это не вызывает
-// CORS-preflight (OPTIONS), который Apps Script не умеет обрабатывать.
-async function apiPost(action, data) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    body: JSON.stringify(Object.assign({ action: action }, data))
+    function cleanup() {
+      clearTimeout(timeoutId);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cbName] = function (data) {
+      cleanup();
+      resolve(data);
+    };
+
+    const qs = Object.keys(params || {}).map(function (k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+
+    const script = document.createElement('script');
+    script.src = API_URL + '?action=' + encodeURIComponent(action) +
+      '&callback=' + cbName + (qs ? '&' + qs : '');
+    script.onerror = function () {
+      cleanup();
+      reject(new Error('Не удалось загрузить ответ сервера — проверьте API_URL.'));
+    };
+    document.body.appendChild(script);
   });
-  return res.json();
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
@@ -42,7 +65,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     return;
   }
   try {
-    INIT = await apiGet('getInitData');
+    INIT = await jsonp('getInitData');
     const sel = document.getElementById('loginSelect');
     INIT.users.forEach(function (u) {
       const opt = document.createElement('option');
@@ -70,7 +93,7 @@ async function doLogin() {
   const errBox = document.getElementById('loginError');
   errBox.textContent = '';
   try {
-    const res = await apiPost('login', { loginId: loginId, password: password });
+    const res = await jsonp('login', { loginId: loginId, password: password });
     if (!res.ok) { errBox.textContent = res.error; return; }
     CURRENT.loginId = loginId; CURRENT.fio = res.fio; CURRENT.role = res.role;
     if (res.mustChangePassword) { goStep('step-newpass'); } else { afterLogin(); }
@@ -87,7 +110,7 @@ async function doSetNewPassword() {
   if (p1 !== p2) { err.textContent = 'Пароли не совпадают.'; return; }
   const oldPassword = document.getElementById('loginPassword').value;
   try {
-    const res = await apiPost('setNewPassword', { loginId: CURRENT.loginId, oldPassword: oldPassword, newPassword: p1 });
+    const res = await jsonp('setNewPassword', { loginId: CURRENT.loginId, oldPassword: oldPassword, newPassword: p1 });
     if (!res.ok) { err.textContent = res.error; return; }
     afterLogin();
   } catch (e) {
@@ -211,7 +234,7 @@ async function doSubmit() {
     err.textContent = 'Укажите хотя бы одну позицию с количеством.'; return;
   }
   try {
-    const res = await apiPost('submitReport', { payload: payload });
+    const res = await jsonp('submitReport', { payload: JSON.stringify(payload) });
     if (!res.ok) { err.textContent = res.error || 'Не удалось отправить отчёт.'; return; }
     document.getElementById('doneSummary').textContent =
       'Материалы: ' + res.totalM.toLocaleString('ru-RU') +
