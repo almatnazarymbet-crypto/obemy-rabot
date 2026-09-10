@@ -14,21 +14,40 @@ var SS = SpreadsheetApp.getActiveSpreadsheet();
 
 /* ============================ ВХОДНЫЕ ТОЧКИ (API) ============================ */
 
-// Только для чтения: ?action=getInitData
+// Всё — через GET с параметром callback (JSONP). Это осознанный выбор:
+// прямой fetch() с чужого домена (GitHub Pages) к Apps Script может
+// упираться в CORS, даже когда доступ выставлен на "Все" — ответ
+// уходит через внутренний редирект Google, и браузер иногда блокирует
+// его чтение. Загрузка через <script src="..."> этому правилу не подчиняется,
+// поэтому работает надёжно в 100% случаев.
 function doGet(e) {
+  var result;
   try {
     var action = e.parameter.action;
-    if (action === 'getInitData') return jsonOut_(getInitData());
-    return jsonOut_({ ok: false, error: 'Неизвестное действие: ' + action });
+    switch (action) {
+      case 'getInitData':
+        result = getInitData();
+        break;
+      case 'login':
+        result = login(e.parameter.loginId, e.parameter.password);
+        break;
+      case 'setNewPassword':
+        result = setNewPassword(e.parameter.loginId, e.parameter.oldPassword, e.parameter.newPassword);
+        break;
+      case 'submitReport':
+        result = submitReport(JSON.parse(e.parameter.payload || '{}'));
+        break;
+      default:
+        result = { ok: false, error: 'Неизвестное действие: ' + action };
+    }
   } catch (err) {
-    return jsonOut_({ ok: false, error: String(err) });
+    result = { ok: false, error: String(err) };
   }
+  return callbackOut_(e, result);
 }
 
-// Действия, которые что-то меняют: login, setNewPassword, submitReport
-// Тело запроса — обычный JSON-текст (fetch отправляет его как text/plain,
-// чтобы браузер не слал предварительный CORS-запрос OPTIONS,
-// который Apps Script не обрабатывает).
+// Оставлен для совместимости / прямого тестирования (Postman и т.п.) —
+// сайт им больше не пользуется, только doGet.
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
@@ -46,14 +65,20 @@ function doPost(e) {
       default:
         result = { ok: false, error: 'Неизвестное действие: ' + data.action };
     }
-    return jsonOut_(result);
+    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return jsonOut_({ ok: false, error: String(err) });
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(err) })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-function jsonOut_(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+function callbackOut_(e, obj) {
+  var json = JSON.stringify(obj);
+  if (e.parameter.callback) {
+    return ContentService
+      .createTextOutput(e.parameter.callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
 /* ============================ УТИЛИТЫ ============================ */
@@ -233,11 +258,11 @@ function buildExportFile_(payload, rows, totalM, totalR) {
     var rowNum = sh.getLastRow() + 1;
     sh.appendRow([r[0], r[1], r[2], r[3], '=B' + rowNum + '*C' + rowNum, '=B' + rowNum + '*D' + rowNum]);
   });
-  sh.appendRow([]);
+  sh.appendRow(['']);
   sh.appendRow(['', '', '', '', 'Итого работы', totalR]);
   sh.appendRow(['', '', '', '', 'Итого материал', totalM]);
   sh.appendRow(['', '', '', '', 'Итого', totalM + totalR]);
-  sh.appendRow([]);
+  sh.appendRow(['']);
   var teamLine = 'Пользователи - ' + [payload.fio].concat(payload.teammates || []).join(', ');
   sh.appendRow([teamLine]);
   var locLine = [payload.area, payload.district, payload.okrug, payload.village, payload.street]
@@ -246,12 +271,15 @@ function buildExportFile_(payload, rows, totalM, totalR) {
   sh.autoResizeColumns(1, 6);
   SpreadsheetApp.flush();
 
-  var file = DriveApp.getFileById(tempSs.getId());
-  var xlsxBlob = file.getAs(MimeType.MICROSOFT_EXCEL).setName(fileName + '.xlsx');
+  var url = 'https://docs.google.com/spreadsheets/d/' + tempSs.getId() + '/export?format=xlsx';
+  var response = UrlFetchApp.fetch(url, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }
+  });
+  var xlsxBlob = response.getBlob().setName(fileName + '.xlsx');
 
   var folder = getOrCreateFolder_(getSetting_('Папка на Google Диске для файлов отчётов') || 'Отчёты_объёмы_работ');
   var savedFile = folder.createFile(xlsxBlob);
-  file.setTrashed(true); // временную Google-таблицу больше не храним, оставляем только xlsx
+  DriveApp.getFileById(tempSs.getId()).setTrashed(true); // временную Google-таблицу больше не храним, оставляем только xlsx
 
   return { blob: xlsxBlob, fileName: fileName + '.xlsx', url: savedFile.getUrl() };
 }
